@@ -53,7 +53,7 @@ type MarketResponse struct {
 }
 
 func getRootUrl() string {
-	return "https://trading.dmarket.com"
+	return "https://api.dmarket.com"
 }
 
 func getFirstOfferFromMarket() (offer Offer) {

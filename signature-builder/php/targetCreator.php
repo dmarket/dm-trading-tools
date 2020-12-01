@@ -10,7 +10,7 @@ var_dump([
 
 
 function getRootUrl() {
-    return "https://trading.dmarket.com";
+    return "https://api.dmarket.com";
 }
 
 function generateSignature($privateKey, $method, $route, $timestamp, array $postParams = [])

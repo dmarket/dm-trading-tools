@@ -42,7 +42,7 @@ function hex2ascii(hexx) {
 // insert your api keys
 const publicKey = "8397eb8e7f88032eb13dca99a11350b05d290c896a96afd60b119184b1b443c9";
 const secretKey = "2de2824ac1752d0ed3c66abc67bec2db553022aa718287a1e773e104303031208397eb8e7f88032eb13dca99a11350b05d290c896a96afd60b119184b1b443c9";
-const host = 'trading.dmarket.com';
+const host = 'api.dmarket.com';
 
 function getFirstOfferFromMarket() {
     const requestOptions = {

@@ -5,11 +5,11 @@ from nacl.bindings import crypto_sign
 import requests
 
 # replace with your api keys
-public_key = "8397eb8e7f88032eb13dca99a11350b05d290c896a96afd60b119184b1b443c9"
-secret_key = "2de2824ac1752d0ed3c66abc67bec2db553022aa718287a1e773e104303031208397eb8e7f88032eb13dca99a11350b05d290c896a96afd60b119184b1b443c9"
+public_key = "17e78b6022d5470402674c551ac8ad6d572deee3d753a1c9eda25394fee6e528"
+secret_key = "1ba46e6a980c6fa4767ff03d8e33ff158f21f980945ca2eb37eeb6eaeb1d41d017e78b6022d5470402674c551ac8ad6d572deee3d753a1c9eda25394fee6e528"
 
 # change url to prod
-rootApiUrl = "https://trading.dmarket.com"
+rootApiUrl = "https://api.dmarket.com"
 
 
 def get_offer_from_market():
