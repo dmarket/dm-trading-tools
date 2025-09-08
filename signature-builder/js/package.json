@@ -1,12 +1,13 @@
 {
-  "name": "suntechsoft",
-  "version": "0.0.0",
-  "license": "MIT",
+  "name": "dmarket-js-example",
+  "version": "1.0.0",
+  "description": "",
+  "main": "targetCreator.js",
   "type": "module",
-  "dependencies": {
-    "tweetnacl": "^1.0.1"
-  },
   "scripts": {
-    "testTargetCreation": "node $NODE_DEBUG_OPTION targetCreator.js"
+    "start": "node targetCreator.js"
+  },
+  "dependencies": {
+    "tweetnacl": "^1.0.3"
   }
 }

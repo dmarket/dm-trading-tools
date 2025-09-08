@@ -1,0 +1,10 @@
+# Environment variables
+.env
+
+# IDE files
+.idea/
+.vscode/
+
+# Language-specific ignores
+/node_modules/
+/vendor/
