@@ -57,7 +57,20 @@ def main():
         print("Response:")
         print(json.dumps(response_data, indent=2))
 
-    # 3. Make a signed POST request to create a target
+    # 3. Make a signed GET request with a value in the ROUTE PATH.
+    #    Pass the title decoded: the signature is built from the decoded path and the client
+    #    percent-encodes the URL before sending it.
+    path = "/marketplace-api/v1/targets-by-title/a8db/AK-47 | Redline (Field-Tested)"
+    print(f"Calling GET {path}")
+    response_data, error = client.call("GET", path)
+
+    if error:
+        print(f"Error: {error}")
+    else:
+        print("Response:")
+        print(json.dumps(response_data, indent=2))
+
+    # 4. Make a signed POST request to create a target
     try:
         print("\nFetching an offer from the market to create a target...")
         offer = get_offer_from_market(client)

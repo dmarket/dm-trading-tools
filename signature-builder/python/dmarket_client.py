@@ -36,6 +36,8 @@ class DMarketClient:
             else:
                 request_body = json.dumps(payload)
 
+        # The signature is built from the DECODED path — that is what the API verifies —
+        # while query parameters are signed exactly as they are transmitted (percent-encoded).
         string_to_sign = method + api_url_path + request_body + nonce
         signature = self._generate_signature(string_to_sign)
 
@@ -47,7 +49,8 @@ class DMarketClient:
         if method not in ["GET"] and payload:
             headers["Content-Type"] = "application/json"
 
-        full_url = self._root_api_url + api_url_path
+        # ...and the URL on the wire is percent-encoded.
+        full_url = self._root_api_url + self._encode_path(api_url_path)
 
         try:
             response = requests.request(
@@ -61,6 +64,19 @@ class DMarketClient:
         except requests.exceptions.RequestException as e:
             error_details = e.response.text if e.response else "No response body"
             return None, f"API call failed: {e}. Details: {error_details}"
+
+    @staticmethod
+    def _encode_path(api_url_path: str) -> str:
+        """
+        Percent-encodes each path segment, leaving an already-encoded query string as is.
+
+        Needed for endpoints that take a free-text value in the route path, e.g.
+        GET /marketplace-api/v1/targets-by-title/{game_id}/{title}: pass the title decoded,
+        sign the decoded path, send the encoded URL.
+        """
+        path, separator, query = api_url_path.partition("?")
+        encoded_path = "/".join(quote(segment, safe="") for segment in path.split("/"))
+        return encoded_path + separator + query
 
     def _generate_signature(self, string_to_sign: str) -> str:
         encoded = string_to_sign.encode('utf-8')

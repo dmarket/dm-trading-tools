@@ -31,6 +31,8 @@ class DMarketClient {
             }
         }
 
+        // The signature is built from the DECODED path - that is what the API verifies -
+        // while query parameters are signed exactly as they are transmitted (percent-encoded).
         $stringToSign = $method . $apiUrlPath . $requestBody . $timestamp;
         $signature = $this->generateSignature($stringToSign);
 
@@ -44,7 +46,8 @@ class DMarketClient {
             $headers[] = 'Content-Type: application/json';
         }
 
-        $fullUrl = $this->rootApiUrl . $apiUrlPath;
+        // ...and the URL on the wire is percent-encoded.
+        $fullUrl = $this->rootApiUrl . $this->encodePath($apiUrlPath);
 
         $curl = curl_init();
         curl_setopt($curl, CURLOPT_URL, $fullUrl);
@@ -70,6 +73,22 @@ class DMarketClient {
         }
 
         return [json_decode($response, true), null];
+    }
+
+    /**
+     * Percent-encodes each path segment, leaving an already-encoded query string as is.
+     *
+     * Needed for endpoints that take a free-text value in the route path, e.g.
+     * GET /marketplace-api/v1/targets-by-title/{game_id}/{title}: pass the title decoded,
+     * sign the decoded path, send the encoded URL. Without this, curl rejects a decoded
+     * path with "URL rejected: Malformed input to a URL function".
+     */
+    private function encodePath(string $apiUrlPath): string {
+        $queryIndex = strpos($apiUrlPath, '?');
+        $path = $queryIndex === false ? $apiUrlPath : substr($apiUrlPath, 0, $queryIndex);
+        $query = $queryIndex === false ? '' : substr($apiUrlPath, $queryIndex);
+
+        return implode('/', array_map('rawurlencode', explode('/', $path))) . $query;
     }
 
     private function generateSignature(string $stringToSign): string {

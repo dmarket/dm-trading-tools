@@ -69,10 +69,13 @@ func (c *DMarketClient) Call(method, path string, payload interface{}) (interfac
 		}
 	}
 
+	// The signature is built from the DECODED path — that is what the API verifies —
+	// while query parameters are signed exactly as they are transmitted (percent-encoded).
 	stringToSign := method + apiUrlPath + string(requestBody) + timestamp
 	signature := c.generateSignature(stringToSign)
 
-	fullUrl := rootApiUrl + apiUrlPath
+	// ...and the URL on the wire is percent-encoded.
+	fullUrl := rootApiUrl + encodePath(apiUrlPath)
 	req, err := http.NewRequest(method, fullUrl, bytes.NewBuffer(requestBody))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -107,6 +110,24 @@ func (c *DMarketClient) Call(method, path string, payload interface{}) (interfac
 	}
 
 	return result, nil
+}
+
+// encodePath percent-encodes each path segment, leaving an already-encoded query string
+// as is. Needed for endpoints that take a free-text value in the route path, e.g.
+// GET /marketplace-api/v1/targets-by-title/{game_id}/{title}: pass the title decoded,
+// sign the decoded path, send the encoded URL.
+func encodePath(apiUrlPath string) string {
+	path, query := apiUrlPath, ""
+	if i := strings.Index(apiUrlPath, "?"); i >= 0 {
+		path, query = apiUrlPath[:i], apiUrlPath[i:]
+	}
+
+	segments := strings.Split(path, "/")
+	for i, segment := range segments {
+		segments[i] = url.PathEscape(segment)
+	}
+
+	return strings.Join(segments, "/") + query
 }
 
 func (c *DMarketClient) generateSignature(stringToSign string) string {

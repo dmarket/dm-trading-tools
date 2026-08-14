@@ -53,6 +53,8 @@ export class DMarketClient {
             }
         }
 
+        // The signature is built from the DECODED path — that is what the API verifies —
+        // while query parameters are signed exactly as they are transmitted (percent-encoded).
         const stringToSign = method + apiUrlPath + requestBody + timestamp;
         const signature = this._generateSignature(stringToSign);
 
@@ -69,7 +71,8 @@ export class DMarketClient {
 
         const options = {
             hostname: this.rootApiUrl,
-            path: apiUrlPath,
+            // ...and the URL on the wire is percent-encoded.
+            path: this._encodePath(apiUrlPath),
             method: method,
             headers: headers,
         };
@@ -103,6 +106,22 @@ export class DMarketClient {
 
             req.end();
         });
+    }
+
+    /**
+     * Percent-encodes each path segment, leaving an already-encoded query string as is.
+     *
+     * Needed for endpoints that take a free-text value in the route path, e.g.
+     * GET /marketplace-api/v1/targets-by-title/{game_id}/{title}: pass the title decoded,
+     * sign the decoded path, send the encoded URL. Without this, https.request throws
+     * ERR_UNESCAPED_CHARACTERS on a decoded path.
+     */
+    _encodePath(apiUrlPath) {
+        const queryIndex = apiUrlPath.indexOf('?');
+        const path = queryIndex === -1 ? apiUrlPath : apiUrlPath.slice(0, queryIndex);
+        const query = queryIndex === -1 ? '' : apiUrlPath.slice(queryIndex);
+
+        return path.split('/').map(encodeURIComponent).join('/') + query;
     }
 
     _generateSignature(stringToSign) {

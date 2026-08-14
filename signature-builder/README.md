@@ -11,3 +11,19 @@ It offers you a bot that:
 - creates a target using the body of the target and signature with an API request (POST exchange/v1/target/create)
 
 You may use the examples to extend the logic for all the trading operations on the DMarket.
+## Signing a request path vs. query string
+
+The non-signed string is `(HTTP method) + (route path + query string) + (body) + (timestamp)`, and
+the two URL parts are treated differently:
+
+- **route path** — signed **decoded**, i.e. with the literal value
+  (`/marketplace-api/v1/targets-by-title/a8db/AK-47 | Redline (Field-Tested)`);
+- **query string** — signed **exactly as transmitted**, i.e. percent-encoded
+  (`?gameId=a8db&title=AK-47%20%7C%20Redline%20%28Field-Tested%29`).
+
+The URL that goes over the wire is percent-encoded in both cases — the clients here do that for
+you, so always hand them the decoded path. Signing an already-encoded path returns
+`401 Unauthorized`.
+
+This only matters for methods that take a free-text value in the route path, currently
+`GET /marketplace-api/v1/targets-by-title/{game_id}/{title}`.

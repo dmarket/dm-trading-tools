@@ -100,6 +100,20 @@ func main() {
 		fmt.Println(string(prettyJSON))
 	}
 
+	// A signed GET request with a value in the ROUTE PATH. Pass the title decoded: the
+	// signature is built from the decoded path and the client percent-encodes the URL
+	// before sending it.
+	pathWithParam := "/marketplace-api/v1/targets-by-title/a8db/AK-47 | Redline (Field-Tested)"
+	fmt.Printf("Calling GET %s\n", pathWithParam)
+	targetsData, err := client.Call("GET", pathWithParam, nil)
+	if err != nil {
+		log.Printf("Error: %v", err)
+	} else {
+		fmt.Println("Response:")
+		prettyJSON, _ := json.MarshalIndent(targetsData, "", "  ")
+		fmt.Println(string(prettyJSON))
+	}
+
 	fmt.Println("\nFetching an offer from the market to create a target...")
 	offer, err := getOfferFromMarket(client)
 	if err != nil {
