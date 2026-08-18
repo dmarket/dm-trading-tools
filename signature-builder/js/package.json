@@ -2,10 +2,10 @@
   "name": "dmarket-js-example",
   "version": "1.0.0",
   "description": "",
-  "main": "targetCreator.js",
+  "main": "main.js",
   "type": "module",
   "scripts": {
-    "start": "node targetCreator.js"
+    "start": "node main.js"
   },
   "dependencies": {
     "tweetnacl": "^1.0.3"
