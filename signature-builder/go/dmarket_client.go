@@ -54,7 +54,6 @@ func (c *DMarketClient) Call(method, path string, payload interface{}) (interfac
 	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
 	query := ""
 	var requestBody []byte
-	var err error
 
 	if payload != nil {
 		if method == "GET" {
@@ -70,9 +69,15 @@ func (c *DMarketClient) Call(method, path string, payload interface{}) (interfac
 				query = "?" + encoded
 			}
 		} else {
-			requestBody, err = json.Marshal(payload)
+			marshalled, err := json.Marshal(payload)
 			if err != nil {
 				return nil, fmt.Errorf("failed to marshal payload: %w", err)
+			}
+			// An empty payload means no body, so that all four clients sign the same
+			// string for the same call: an empty map is non-nil here but falsy in the
+			// PHP and Python samples.
+			if encoded := string(marshalled); encoded != "{}" && encoded != "[]" && encoded != "null" {
+				requestBody = marshalled
 			}
 		}
 	}
@@ -92,7 +97,7 @@ func (c *DMarketClient) Call(method, path string, payload interface{}) (interfac
 	req.Header.Set("X-Api-Key", c.publicKey)
 	req.Header.Set("X-Request-Sign", signaturePrefix+signature)
 	req.Header.Set("X-Sign-Date", timestamp)
-	if method != "GET" && payload != nil {
+	if method != "GET" && len(requestBody) > 0 {
 		req.Header.Set("Content-Type", "application/json")
 	}
 

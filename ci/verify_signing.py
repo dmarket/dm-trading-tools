@@ -85,6 +85,7 @@ CASES = [
     Case('free-text path plus query', 'GET', TARGETS_PATH, {'limit': '1', 'currency': 'USD'}),
     Case('query only', 'GET', LAST_SALES_PATH, {'gameId': 'a8db', 'title': TITLE}),
     Case('json body', 'POST', CREATE_PATH, {'title': TITLE}),
+    Case('empty payload, no body', 'POST', CREATE_PATH, {}),
 ]
 
 KEY = SigningKey.generate()

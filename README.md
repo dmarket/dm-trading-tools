@@ -100,8 +100,11 @@ Handing a client an already percent-encoded path does **not** fail loudly. It ge
 time, the API decodes it back to what you signed, the signature verifies — and then the API looks up a
 title that literally contains `%20`, so you get a perfectly successful response about the wrong item.
 
-One limitation: a `/` inside a free-text value is not supported. The clients encode segment by segment,
-so the `/` stays a separator and the request lands on a different route.
+Two characters are not supported inside a free-text value. A `/` stays a separator, because the clients
+encode segment by segment, so the request lands on a different route. And a `?` is rejected outright:
+`call` refuses a `path` containing one, on the grounds that it is far more likely to be a query string
+you meant to pass as `payload` than part of an item name. If you do need a title containing `?`, encode
+that segment yourself and call the API directly.
 
 Only endpoints that take a free-text value in the route path are affected — currently
 `GET /marketplace-api/v1/targets-by-title/{game_id}/{title}`.

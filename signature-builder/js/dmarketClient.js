@@ -59,7 +59,13 @@ export class DMarketClient {
                     query = `?${params}`;
                 }
             } else {
-                requestBody = JSON.stringify(payload);
+                // An empty payload means no body, so that all four clients sign the same
+                // string for the same call: {} is truthy here but falsy in the PHP and
+                // Python samples.
+                const encoded = JSON.stringify(payload);
+                if (encoded !== '{}' && encoded !== '[]' && encoded !== 'null') {
+                    requestBody = encoded;
+                }
             }
         }
 
@@ -74,7 +80,7 @@ export class DMarketClient {
             'X-Sign-Date': timestamp,
         };
 
-        if (method !== 'GET' && payload) {
+        if (method !== 'GET' && requestBody) {
             headers['Content-Type'] = 'application/json';
             headers['Content-Length'] = Buffer.byteLength(requestBody);
         }

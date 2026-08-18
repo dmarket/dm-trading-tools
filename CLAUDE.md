@@ -96,6 +96,11 @@ Malformed input to a URL function`. Both were unable to call such an endpoint at
 Also asymmetric by method: a `payload` becomes a query string for `GET` and a JSON body otherwise —
 never both.
 
+`call` rejects a `path` containing `?` in all four clients. `encodePath` would encode it correctly
+(`%3F`), so this is a deliberate trade: an inline query string is the overwhelmingly likelier intent,
+and encoding it would silently send a request with no query rather than fail. The cost is that a title
+containing `?` cannot go through `call` — documented in README.md alongside the `/` limitation.
+
 ## Working in here
 
 - **Change all four clients together.** They are deliberately parallel; a fix landing in one language
