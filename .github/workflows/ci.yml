@@ -1,0 +1,100 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    name: Go sample
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: signature-builder/go
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: signature-builder/go/go.mod
+      - run: go build ./...
+      - run: go vet ./...
+
+  js:
+    name: JS sample
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: signature-builder/js
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: npm
+          cache-dependency-path: signature-builder/js/package-lock.json
+      - run: npm ci
+      - run: node --check dmarketClient.js
+      - run: node --check main.js
+
+  php:
+    name: PHP sample
+    runs-on: ubuntu-latest
+    # Matches signature-builder/php/Dockerfile. Debian rather than the Dockerfile's alpine:
+    # actions/checkout runs node inside the container, which alpine cannot provide.
+    container: php:8.1-cli
+    defaults:
+      run:
+        working-directory: signature-builder/php
+    steps:
+      - uses: actions/checkout@v4
+      - run: php -l DMarketClient.php
+      - run: php -l main.php
+
+  python:
+    name: Python sample
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: signature-builder/python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+      - run: pip install -r requirements.txt
+      - run: python -m compileall -q .
+
+  signing:
+    name: Signature round-trip
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: signature-builder/go/go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Install client dependencies
+        run: |
+          pip install pynacl requests
+          npm ci --prefix signature-builder/js
+      - name: Check php can sign
+        # The PHP sample calls sodium_crypto_sign_detached directly. composer.json pulls in
+        # paragonie/sodium_compat as a polyfill, but composer.lock is stale (it pins v1.13.0
+        # against a "^1.19" requirement), so `composer install` fails — assert the built-in
+        # extension instead of depending on a lock file that cannot install.
+        run: |
+          php -r 'exit(extension_loaded("sodium") ? 0 : 1);'
+      - name: Verify every sample signs what the API verifies
+        env:
+          # fail, rather than skip, if a toolchain is missing on the runner
+          DMTT_REQUIRE: python,go,js,php
+        run: python ci/verify_signing.py
