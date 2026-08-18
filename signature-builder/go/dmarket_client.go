@@ -43,10 +43,16 @@ func NewDMarketClient(publicKey, secretKeyHex string) (*DMarketClient, error) {
 	}, nil
 }
 
+// Call signs and sends a request. path is a route path only, with any free-text value in it
+// left decoded; query parameters go in payload, never in path.
 func (c *DMarketClient) Call(method, path string, payload interface{}) (interface{}, error) {
 	method = strings.ToUpper(method)
+	if strings.Contains(path, "?") {
+		return nil, fmt.Errorf("path must not contain a query string: pass query parameters as payload")
+	}
+
 	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
-	apiUrlPath := path
+	query := ""
 	var requestBody []byte
 	var err error
 
@@ -56,11 +62,13 @@ func (c *DMarketClient) Call(method, path string, payload interface{}) (interfac
 			if !ok {
 				return nil, fmt.Errorf("GET payload must be a map[string]string")
 			}
-			query := url.Values{}
+			values := url.Values{}
 			for k, v := range params {
-				query.Add(k, v)
+				values.Add(k, v)
 			}
-			apiUrlPath = path + "?" + query.Encode()
+			if encoded := values.Encode(); encoded != "" {
+				query = "?" + encoded
+			}
 		} else {
 			requestBody, err = json.Marshal(payload)
 			if err != nil {
@@ -69,13 +77,13 @@ func (c *DMarketClient) Call(method, path string, payload interface{}) (interfac
 		}
 	}
 
-	// The signature is built from the DECODED path — that is what the API verifies —
-	// while query parameters are signed exactly as they are transmitted (percent-encoded).
-	stringToSign := method + apiUrlPath + string(requestBody) + timestamp
+	// The signature is built from the path as passed in — the API verifies the DECODED path —
+	// plus the query string byte-for-byte as it is transmitted.
+	stringToSign := method + path + query + string(requestBody) + timestamp
 	signature := c.generateSignature(stringToSign)
 
-	// ...and the URL on the wire is percent-encoded.
-	fullUrl := rootApiUrl + encodePath(apiUrlPath)
+	// ...while the path on the wire is percent-encoded. The query is already encoded.
+	fullUrl := rootApiUrl + c.encodePath(path) + query
 	req, err := http.NewRequest(method, fullUrl, bytes.NewBuffer(requestBody))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -112,22 +120,21 @@ func (c *DMarketClient) Call(method, path string, payload interface{}) (interfac
 	return result, nil
 }
 
-// encodePath percent-encodes each path segment, leaving an already-encoded query string
-// as is. Needed for endpoints that take a free-text value in the route path, e.g.
-// GET /marketplace-api/v1/targets-by-title/{game_id}/{title}: pass the title decoded,
-// sign the decoded path, send the encoded URL.
-func encodePath(apiUrlPath string) string {
-	path, query := apiUrlPath, ""
-	if i := strings.Index(apiUrlPath, "?"); i >= 0 {
-		path, query = apiUrlPath[:i], apiUrlPath[i:]
-	}
-
+// encodePath percent-encodes each segment of a query-free route path. Needed for endpoints
+// that take a free-text value in the route path, e.g.
+// GET /marketplace-api/v1/targets-by-title/{game_id}/{title}: pass the title decoded, sign
+// the decoded path, send the encoded path. A literal "%" therefore becomes "%25".
+func (c *DMarketClient) encodePath(path string) string {
 	segments := strings.Split(path, "/")
 	for i, segment := range segments {
-		segments[i] = url.PathEscape(segment)
+		// Everything outside the RFC 3986 unreserved set (A-Za-z0-9-._~) is encoded.
+		// url.PathEscape would leave & = + : @ $ raw, and a raw "+" is read as a space by
+		// anything that form-decodes the path. QueryEscape encodes those but writes a
+		// space as "+", so put it back as "%20".
+		segments[i] = strings.ReplaceAll(url.QueryEscape(segment), "+", "%20")
 	}
 
-	return strings.Join(segments, "/") + query
+	return strings.Join(segments, "/")
 }
 
 func (c *DMarketClient) generateSignature(stringToSign string) string {

@@ -5,7 +5,7 @@ WORKDIR /app
 # Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-COPY php/composer.json .
+COPY php/composer.json php/composer.lock ./
 
 RUN composer install --no-dev --optimize-autoloader
 

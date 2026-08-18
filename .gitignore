@@ -3,3 +3,6 @@
 **/node_modules/**
 **/vendor/**
 **/__pycache__/**
+
+# `go build ./...` in signature-builder/go names the binary after the module: "go"
+signature-builder/go/go

@@ -11,7 +11,10 @@ Spec: <https://docs.dmarket.com/v1/swagger.html>.
 
 Each language has the same two files: a `DMarketClient` (`dmarket_client.go`, `dmarketClient.js`,
 `DMarketClient.php`, `dmarket_client.py`) exposing one `call(method, path, payload)` entry point, and a
-`main.*` demo that uses it.
+`main.*` demo that uses it. The *signing* is line-for-line parallel; the surrounding idioms are not —
+`call` returns `(result, error)` in Go, a `(response, error)` tuple in Python and a two-element array in
+PHP, and returns a promise that rejects in JS. Errors are raised for programming mistakes (bad keys, a
+`?` in `path`) and returned for transport and HTTP failures.
 
 ## Commands
 
@@ -45,8 +48,10 @@ composer install --working-dir signature-builder/php
 python ci/verify_signing.py
 ```
 
-`ci/verify_signing.py` env knobs: `DMTT_ONLY` (subset of `python,go,js,php`), `DMTT_REQUIRE` (fail
-instead of skip when a toolchain is missing — CI requires all four), `DMTT_PHP`, `DMTT_CLIENT_HOST`.
+`ci/verify_signing.py` env knobs: `DMTT_ONLY` (subset of `python,go,js,php`), `DMTT_REQUIRE` (those
+languages must end up *verified*, not merely not-skipped — CI requires all four), `DMTT_PHP`,
+`DMTT_CLIENT_HOST`. An unknown language in either aborts the run, and so does a run that verified
+nothing.
 
 ## The signing contract
 
@@ -62,14 +67,26 @@ seconds, rejected if older than 2 minutes), `X-Request-Sign: dmar ed25519 <hex>`
 | URL part | Signed as | Sent as |
 |---|---|---|
 | route path | **decoded** (literal value) | percent-encoded |
-| query string | percent-encoded, byte-for-byte what is sent | same |
+| query string | byte-for-byte what is sent | same |
 
-The server rebuilds the string from the URL it received using a decoded path and a raw query, so a
-client that signs an encoded path gets `401`. Hence `encodePath()` in every client: it percent-encodes
-**path segments only, for transport**, while the signature is still computed from the `path` argument as
-passed in. Callers always hand the client a decoded path. Do not "simplify" that split away — it is the
-fix for SUPD-27468, and it only shows up on endpoints with a free-text path parameter (currently just
+The query string has no canonical form to match — Go and JS write a space as `+`, PHP and Python as
+`%20`, and all four are fine because each signs what it sends. The path does have one: the server
+rebuilds the string from the URL it received using a *decoded* path, so a client that signs the encoded
+path gets `401`. Hence `encodePath()` in every client: it percent-encodes **path segments only, for
+transport**, while the signature is computed from the `path` argument as passed in. Callers always hand
+the client a decoded path, query-free — `call` rejects a `path` containing `?`, because the helper can
+no longer tell a query separator from a literal one. Do not "simplify" that split away — it is the fix
+for SUPD-27468, and it only shows up on endpoints with a free-text path parameter (currently just
 `GET /marketplace-api/v1/targets-by-title/{game_id}/{title}`).
+
+The reverse mistake is quiet, not loud: pass an already-encoded path and it is encoded twice, the API
+decodes it back to what was signed, the signature verifies, and the lookup runs against a title that
+literally contains `%20`.
+
+All four `encodePath()`s encode everything outside the RFC 3986 unreserved set (`A-Za-z0-9-._~`), so
+they emit byte-identical paths. That is why Go uses `url.QueryEscape` with `+`→`%20` rather than
+`url.PathEscape` (which leaves `& = + : @ $` raw), and why the JS one encodes `! ' ( ) *` on top of
+`encodeURIComponent`. `ci/verify_signing.py` fails if the four ever drift apart.
 
 Why it was invisible for half the clients: Go and Python re-encode the path in their HTTP layers, so
 signing a decoded path happened to work. `https.request` in node writes `path` into the request line
@@ -87,9 +104,15 @@ never both.
 - `ci/verify_signing.py` deliberately mirrors the *server*: it rebuilds the non-signed string from the
   URL the listener received (decoded path + raw query) and verifies the signature against that. Keep it
   that way — asserting against a string the client itself produced would prove nothing.
+- **The harness patches the client sources by string match** to point them at its listener: the base-URL
+  literal in each client, plus `import https` / the import block / the request options. Renaming or
+  reformatting those lines does not break silently — every patch and every skip is fail-closed, and a
+  no-match aborts the run — but you do have to update the corresponding `patch(...)` call. Same for the
+  request count: the harness asserts each client sends exactly the four cases in `CASES`.
 - **`main.*` demos hit production and create a real buy order** (`exchange/v1/target/create`) with real
   keys. Do not run them casually to "check something"; use `ci/verify_signing.py`, which talks to a
   local listener with a throwaway keypair.
-- The PHP sample needs the sodium functions: `php/php.ini` enables the built-in extension for the
-  Docker image, and `composer.json` pulls in `paragonie/sodium_compat` as the polyfill for hosts
-  without it.
+- The PHP sample needs the sodium functions. They are compiled into the `php:8.1-cli-alpine` base
+  image, so the Docker build needs nothing extra; `php/php.ini` is *not* what provides them — the CLI
+  SAPI never scans `/app` for an ini file, so that file has no effect. `composer.json` pulls in
+  `paragonie/sodium_compat` as the polyfill for hosts whose PHP lacks the extension.

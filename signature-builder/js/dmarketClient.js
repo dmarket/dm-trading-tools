@@ -38,24 +38,34 @@ export class DMarketClient {
         this.signaturePrefix = 'dmar ed25519 ';
     }
 
+    /**
+     * Signs and sends a request. `path` is a route path only, with any free-text value in it
+     * left decoded; query parameters go in `payload`, never in `path`.
+     */
     async call(method, path, payload = null) {
         method = method.toUpperCase();
+        if (path.includes('?')) {
+            throw new Error('path must not contain a query string: pass query parameters as payload.');
+        }
+
         const timestamp = Math.floor(new Date().getTime() / 1000);
-        let apiUrlPath = path;
+        let query = '';
         let requestBody = '';
 
         if (payload) {
             if (method === 'GET') {
-                const params = new URLSearchParams(payload);
-                apiUrlPath = `${path}?${params.toString()}`;
+                const params = new URLSearchParams(payload).toString();
+                if (params) {
+                    query = `?${params}`;
+                }
             } else {
                 requestBody = JSON.stringify(payload);
             }
         }
 
-        // The signature is built from the DECODED path — that is what the API verifies —
-        // while query parameters are signed exactly as they are transmitted (percent-encoded).
-        const stringToSign = method + apiUrlPath + requestBody + timestamp;
+        // The signature is built from the path as passed in — the API verifies the DECODED path —
+        // plus the query string byte-for-byte as it is transmitted.
+        const stringToSign = method + path + query + requestBody + timestamp;
         const signature = this._generateSignature(stringToSign);
 
         const headers = {
@@ -71,8 +81,8 @@ export class DMarketClient {
 
         const options = {
             hostname: this.rootApiUrl,
-            // ...and the URL on the wire is percent-encoded.
-            path: this._encodePath(apiUrlPath),
+            // ...while the path on the wire is percent-encoded. The query is already encoded.
+            path: this._encodePath(path) + query,
             method: method,
             headers: headers,
         };
@@ -109,19 +119,23 @@ export class DMarketClient {
     }
 
     /**
-     * Percent-encodes each path segment, leaving an already-encoded query string as is.
+     * Percent-encodes each segment of a query-free route path.
      *
      * Needed for endpoints that take a free-text value in the route path, e.g.
      * GET /marketplace-api/v1/targets-by-title/{game_id}/{title}: pass the title decoded,
-     * sign the decoded path, send the encoded URL. Without this, https.request throws
-     * ERR_UNESCAPED_CHARACTERS on a decoded path.
+     * sign the decoded path, send the encoded path. Without this, https.request throws
+     * ERR_UNESCAPED_CHARACTERS on a decoded path. A literal "%" becomes "%25".
      */
-    _encodePath(apiUrlPath) {
-        const queryIndex = apiUrlPath.indexOf('?');
-        const path = queryIndex === -1 ? apiUrlPath : apiUrlPath.slice(0, queryIndex);
-        const query = queryIndex === -1 ? '' : apiUrlPath.slice(queryIndex);
-
-        return path.split('/').map(encodeURIComponent).join('/') + query;
+    _encodePath(path) {
+        // encodeURIComponent leaves ! ' ( ) * raw; encode those too, so the wire form is
+        // exactly RFC 3986 unreserved (A-Za-z0-9-._~) and matches the other three clients.
+        return path
+            .split('/')
+            .map((segment) => encodeURIComponent(segment).replace(
+                /[!'()*]/g,
+                (character) => '%' + character.charCodeAt(0).toString(16).toUpperCase(),
+            ))
+            .join('/');
     }
 
     _generateSignature(stringToSign) {
