@@ -70,7 +70,20 @@ async function main() {
         console.error(`Error: ${error.message}`);
     }
 
-    // 3. Make a signed POST request to create a target
+    // 3. Make a signed GET request with a value in the ROUTE PATH.
+    //    Pass the title decoded: the signature is built from the decoded path and the client
+    //    percent-encodes the URL before sending it.
+    const pathWithParam = "/marketplace-api/v1/targets-by-title/a8db/AK-47 | Redline (Field-Tested)";
+    console.log(`Calling GET ${pathWithParam}`);
+    try {
+        const targetsData = await client.call("GET", pathWithParam);
+        console.log("Response:");
+        console.log(JSON.stringify(targetsData, null, 2));
+    } catch (error) {
+        console.error(`Error: ${error.message}`);
+    }
+
+    // 4. Make a signed POST request to create a target
     try {
         console.log("\nFetching an offer from the market to create a target...");
         const offer = await getOfferFromMarket(client);

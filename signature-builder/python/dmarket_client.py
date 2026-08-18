@@ -21,22 +21,30 @@ class DMarketClient:
         Makes a signed API call to DMarket.
 
         :param method: HTTP method (e.g., 'GET', 'POST').
-        :param path: API endpoint path (e.g., '/trade-aggregator/v1/last-sales').
-        :param payload: Dictionary of parameters for the request.
+        :param path: API endpoint path (e.g., '/trade-aggregator/v1/last-sales'). A route path
+            only, with any free-text value in it left decoded — no query string.
+        :param payload: Dictionary of parameters for the request. Becomes the query string for
+            GET, a JSON body otherwise.
         :return: A tuple of (response_json, error_string).
+        :raises ValueError: if path carries a query string.
         """
+        if "?" in path:
+            raise ValueError("path must not contain a query string: pass query parameters as payload.")
+
         method = method.upper()
         nonce = str(round(datetime.now().timestamp()))
-        api_url_path = path
+        query = ""
         request_body = ""
 
         if payload:
             if method == "GET":
-                api_url_path = f"{path}?{urlencode(payload, quote_via=quote)}"
+                query = f"?{urlencode(payload, quote_via=quote)}"
             else:
                 request_body = json.dumps(payload)
 
-        string_to_sign = method + api_url_path + request_body + nonce
+        # The signature is built from the path as passed in — the API verifies the DECODED path —
+        # plus the query string byte-for-byte as it is transmitted.
+        string_to_sign = method + path + query + request_body + nonce
         signature = self._generate_signature(string_to_sign)
 
         headers = {
@@ -47,7 +55,8 @@ class DMarketClient:
         if method not in ["GET"] and payload:
             headers["Content-Type"] = "application/json"
 
-        full_url = self._root_api_url + api_url_path
+        # ...while the path on the wire is percent-encoded. The query is already encoded.
+        full_url = self._root_api_url + self._encode_path(path) + query
 
         try:
             response = requests.request(
@@ -61,6 +70,18 @@ class DMarketClient:
         except requests.exceptions.RequestException as e:
             error_details = e.response.text if e.response else "No response body"
             return None, f"API call failed: {e}. Details: {error_details}"
+
+    @staticmethod
+    def _encode_path(path: str) -> str:
+        """
+        Percent-encodes each segment of a query-free route path.
+
+        Needed for endpoints that take a free-text value in the route path, e.g.
+        GET /marketplace-api/v1/targets-by-title/{game_id}/{title}: pass the title decoded,
+        sign the decoded path, send the encoded path. Everything outside the RFC 3986
+        unreserved set (A-Za-z0-9-._~) is encoded, so a literal "%" becomes "%25".
+        """
+        return "/".join(quote(segment, safe="") for segment in path.split("/"))
 
     def _generate_signature(self, string_to_sign: str) -> str:
         encoded = string_to_sign.encode('utf-8')

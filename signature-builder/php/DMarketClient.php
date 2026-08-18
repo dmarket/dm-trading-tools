@@ -16,22 +16,32 @@ class DMarketClient {
         $this->secretKey = $secretKey;
     }
 
+    /**
+     * Signs and sends a request. $path is a route path only, with any free-text value in it
+     * left decoded; query parameters go in $payload, never in $path.
+     */
     public function call(string $method, string $path, array $payload = null) {
         $method = strtoupper($method);
+        if (strpos($path, '?') !== false) {
+            throw new InvalidArgumentException("Path must not contain a query string: pass query parameters as \$payload.");
+        }
+
         $timestamp = (new DateTime())->getTimestamp();
-        $apiUrlPath = $path;
+        $query = '';
         $requestBody = '';
 
         if ($payload) {
             if ($method === 'GET') {
                 // URL-encode query parameters, RFC 3986
-                $apiUrlPath = $path . '?' . http_build_query($payload, '', '&', PHP_QUERY_RFC3986);
+                $query = '?' . http_build_query($payload, '', '&', PHP_QUERY_RFC3986);
             } else {
                 $requestBody = json_encode($payload);
             }
         }
 
-        $stringToSign = $method . $apiUrlPath . $requestBody . $timestamp;
+        // The signature is built from the path as passed in - the API verifies the DECODED
+        // path - plus the query string byte-for-byte as it is transmitted.
+        $stringToSign = $method . $path . $query . $requestBody . $timestamp;
         $signature = $this->generateSignature($stringToSign);
 
         $headers = [
@@ -44,7 +54,8 @@ class DMarketClient {
             $headers[] = 'Content-Type: application/json';
         }
 
-        $fullUrl = $this->rootApiUrl . $apiUrlPath;
+        // ...while the path on the wire is percent-encoded. The query is already encoded.
+        $fullUrl = $this->rootApiUrl . $this->encodePath($path) . $query;
 
         $curl = curl_init();
         curl_setopt($curl, CURLOPT_URL, $fullUrl);
@@ -70,6 +81,19 @@ class DMarketClient {
         }
 
         return [json_decode($response, true), null];
+    }
+
+    /**
+     * Percent-encodes each segment of a query-free route path.
+     *
+     * Needed for endpoints that take a free-text value in the route path, e.g.
+     * GET /marketplace-api/v1/targets-by-title/{game_id}/{title}: pass the title decoded,
+     * sign the decoded path, send the encoded path. Without this, curl rejects a decoded
+     * path with "URL rejected: Malformed input to a URL function". rawurlencode leaves only
+     * the RFC 3986 unreserved set (A-Za-z0-9-._~) alone, so a literal "%" becomes "%25".
+     */
+    private function encodePath(string $path): string {
+        return implode('/', array_map('rawurlencode', explode('/', $path)));
     }
 
     private function generateSignature(string $stringToSign): string {

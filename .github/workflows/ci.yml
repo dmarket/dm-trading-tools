@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    name: Go sample
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: signature-builder/go
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: signature-builder/go/go.mod
+      - run: go build -o /dev/null ./...
+      - run: go vet ./...
+
+  js:
+    name: JS sample
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: signature-builder/js
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: npm
+          cache-dependency-path: signature-builder/js/package-lock.json
+      - run: npm ci
+      - run: node --check dmarketClient.js
+      - run: node --check main.js
+
+  php:
+    name: PHP sample
+    runs-on: ubuntu-latest
+    # Matches signature-builder/php/Dockerfile. Debian rather than the Dockerfile's alpine:
+    # actions/checkout runs node inside the container, which alpine cannot provide.
+    container: php:8.1-cli
+    defaults:
+      run:
+        working-directory: signature-builder/php
+    steps:
+      - uses: actions/checkout@v4
+      - run: php -l DMarketClient.php
+      - run: php -l main.php
+
+  python:
+    name: Python sample
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: signature-builder/python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+      - run: pip install -r requirements.txt
+      - run: python -m compileall -q .
+
+  signing:
+    name: Signature round-trip
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # No PHP setup step: only actions/* are used here, so this job runs whatever php the
+    # runner image ships. The php job above is the one pinned to the Dockerfile's version.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: signature-builder/go/go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - uses: actions/setup-python@v5
+        with:
+          # matches signature-builder/python/Dockerfile
+          python-version: '3.9'
+      - name: Install harness dependencies
+        run: pip install pynacl
+      - name: Install client dependencies
+        # composer install also keeps composer.lock honest: it exits 4 when the lock has
+        # drifted from composer.json, which is how the stale lock in this repo was found.
+        run: |
+          pip install -r signature-builder/python/requirements.txt
+          npm ci --prefix signature-builder/js
+          composer install --no-interaction --quiet --working-dir signature-builder/php
+      - name: Verify every sample signs what the API verifies
+        env:
+          # every language must end up verified — a skip, for a missing toolchain or any
+          # other reason, fails the job
+          DMTT_REQUIRE: python,go,js,php
+        run: python ci/verify_signing.py

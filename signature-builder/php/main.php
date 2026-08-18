@@ -75,7 +75,21 @@ function main() {
         echo json_encode($responseData, JSON_PRETTY_PRINT) . "\n";
     }
 
-    // 3. Make a signed POST request to create a target
+    // 3. Make a signed GET request with a value in the ROUTE PATH.
+    //    Pass the title decoded: the signature is built from the decoded path and the client
+    //    percent-encodes the URL before sending it.
+    $path = "/marketplace-api/v1/targets-by-title/a8db/AK-47 | Redline (Field-Tested)";
+    echo "Calling GET $path\n";
+    list($responseData, $error) = $client->call("GET", $path);
+
+    if ($error) {
+        echo "Error: $error\n";
+    } else {
+        echo "Response:\n";
+        echo json_encode($responseData, JSON_PRETTY_PRINT) . "\n";
+    }
+
+    // 4. Make a signed POST request to create a target
     try {
         echo "\nFetching an offer from the market to create a target...\n";
         $offer = getOfferFromMarket($client);
